@@ -1,0 +1,295 @@
+{
+  "name": "Portfolio 01 – Secure Lead Intake",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Ajánlatkérés",
+        "formDescription": "Kérjen ajánlatot szolgáltatásainkra!",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "customer_name"
+            },
+            {
+              "fieldLabel": "customer_email",
+              "fieldType": "email"
+            },
+            {
+              "fieldLabel": "request_details",
+              "fieldType": "textarea"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        0
+      ],
+      "id": "93a4a6c8-595c-4f7c-8553-5fa8b16338d7",
+      "name": "On form submission"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nreturn $input.all().map(item => {\n  const data = item.json;\n\n  const name = String(data.customer_name ?? \"\").trim();\n  const email = String(data.customer_email ?? \"\").trim();\n  const message = String(data.request_details ?? \"\").trim();\n\n  const errors = [];\n\n  if (name.length < 2 || name.length > 100) {\n    errors.push(\"Hibas nev\");\n  }\n\n  if (\n    email.length > 254 ||\n    !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)\n  ) {\n    errors.push(\"Hibas email\");\n  }\n\n  if (message.length < 10 || message.length > 2000) {\n    errors.push(\"Hibas uzenethossz\");\n  }\n\n  return {\n    json: {\n      customer_name: name,\n      customer_email: email,\n      request_details: message,\n      is_valid: errors.length === 0,\n      errors: errors\n    }\n  };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "2e2bc982-042f-4c70-a250-d088455f7e44",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "5505acce-4c62-48c4-88c5-26b66fdee46c",
+              "leftValue": "={{ $json.is_valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        448,
+        0
+      ],
+      "id": "da364df3-1d0e-4a10-b3af-45337495b1f4",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "\nWITH inserted AS (\n  INSERT INTO lead_requests (\n    customer_name,\n    customer_email,\n    request_details,\n    dedupe_key\n  )\n  VALUES ($1, $2, $3, $4)\n  ON CONFLICT (dedupe_key) DO NOTHING\n  RETURNING id\n)\nSELECT\n  EXISTS (SELECT 1 FROM inserted) AS was_inserted,\n  (SELECT id FROM inserted) AS lead_id;\n",
+        "options": {
+          "queryReplacement": "=\n{{ [\n  $json.customer_name,\n  $json.customer_email,\n  $json.request_details,\n  JSON.stringify([\n    String($json.customer_email ?? \"\").trim().toLowerCase(),\n    String($json.request_details ?? \"\").trim()\n  ])\n] }}\n"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        640,
+        -160
+      ],
+      "id": "bf5a8901-3fed-4b8a-a1dc-32828221a1b8",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "REDACTED",
+          "name": "Neon – Secure Lead App"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "e9260e06-3d6a-44d0-ba5f-244be1a76b7e",
+              "leftValue": "={{ String($json.was_inserted) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        832,
+        -224
+      ],
+      "id": "d65af9c6-5ed9-4e71-bc34-b51e01925c54",
+      "name": "If2"
+    },
+    {
+      "parameters": {
+        "sendTo": "notify@example.com",
+        "subject": "[TESZT] Új ajánlatkérés érkezett",
+        "emailType": "text",
+        "message": "= Új ajánlatkérés érkezett!  Ügyfél neve: {{ $('Code in JavaScript').first().json.customer_name }}  E-mail: {{ $('Code in JavaScript').first().json.customer_email }}  Ajánlatkérés: {{ $('Code in JavaScript').first().json.request_details }}  Adatbázis-azonosító: {{ $json.lead_id }}  Ez egy automatikus tesztértesítés.",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1056,
+        -320
+      ],
+      "id": "6f12cc5c-9bef-455d-8fc9-8ee132d6d928",
+      "name": "Send a message",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REDACTED",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "\nUPDATE lead_requests\nSET notification_status = 'sent'\nWHERE id = $1\n  AND notification_status = 'pending'\nRETURNING id, notification_status;\n",
+        "options": {
+          "queryReplacement": "={{ [ $('Execute a SQL query').first().json.lead_id ] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        1296,
+        -496
+      ],
+      "id": "6e570582-573c-44d2-8946-e8f2fbdc0e77",
+      "name": "mark notification sent",
+      "credentials": {
+        "postgres": {
+          "id": "REDACTED",
+          "name": "Neon – Secure Lead App"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "\nUPDATE lead_requests\nSET notification_status = 'failed'\nWHERE id = $1\n  AND notification_status = 'pending'\nRETURNING id, notification_status;\n",
+        "options": {
+          "queryReplacement": "={{ [ $('Execute a SQL query').first().json.lead_id ] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        1296,
+        -240
+      ],
+      "id": "9874d383-342d-4b38-90f6-744128431d7e",
+      "name": "mark notification failed",
+      "credentials": {
+        "postgres": {
+          "id": "REDACTED",
+          "name": "Neon – Secure Lead App"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "If2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If2": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        [
+          {
+            "node": "mark notification sent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "mark notification failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "tags": []
+}

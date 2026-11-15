@@ -1,0 +1,182 @@
+{
+  "name": "Portfolio 01 – Notification Monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "a2d01fea-6d3c-40de-b4ef-b0f98f9ff892",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "7e7bc893-9cb7-483a-ad44-3cbba95ba455",
+              "leftValue": "={{ Number($json.problem_count) }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        448,
+        0
+      ],
+      "id": "a035a0b3-8005-44fe-bd45-9eda13a97444",
+      "name": "Van értesítési hiba?"
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "=⚠️ Secure Lead Intake – Hibariasztás\n\nA rendszer értesítési problémát talált.\n\nProblémás rekordok száma: {{ $json.problem_count }}\n\nEllenőrizd a Notification Monitor workflow-t és a PostgreSQL-adatbázist.",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        640,
+        -144
+      ],
+      "id": "32dbcc70-f29a-430b-b221-c854c6e83367",
+      "name": "Discord",
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "REDACTED",
+          "name": "Discord Webhook account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "\nSELECT\n  COUNT(*)::integer AS problem_count,\n  COALESCE(\n    json_agg(id ORDER BY id),\n    '[]'::json\n  ) AS alert_ids\nFROM lead_requests\nWHERE alert_sent_at IS NULL\n  AND (\n    notification_status = 'failed'\n    OR (\n      notification_status = 'pending'\n      AND created_at < NOW() - INTERVAL '15 minutes'\n    )\n  );\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        224,
+        0
+      ],
+      "id": "a698a1ff-ae51-4dad-927e-219c96cee3ba",
+      "name": "Find unalerted alerts",
+      "credentials": {
+        "postgres": {
+          "id": "REDACTED",
+          "name": "Neon – Secure Lead App"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "\nWITH alert_ids AS (\n  SELECT jsonb_array_elements_text($1::jsonb)::bigint AS id\n),\nupdated AS (\n  UPDATE lead_requests AS l\n  SET alert_sent_at = NOW()\n  FROM alert_ids\n  WHERE l.id = alert_ids.id\n    AND l.alert_sent_at IS NULL\n    AND (\n      l.notification_status = 'failed'\n      OR (\n        l.notification_status = 'pending'\n        AND l.created_at < NOW() - INTERVAL '15 minutes'\n      )\n    )\n  RETURNING l.id\n)\nSELECT COUNT(*)::integer AS marked_count\nFROM updated;\n",
+        "options": {
+          "queryReplacement": "={{ JSON.stringify($('Find unalerted alerts').first().json.alert_ids) }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        864,
+        -144
+      ],
+      "id": "49c3ed4f-e760-4175-bdca-c8a34054587a",
+      "name": "Mark alerts sent",
+      "credentials": {
+        "postgres": {
+          "id": "REDACTED",
+          "name": "Neon – Secure Lead App"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Find unalerted alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Van értesítési hiba?": {
+      "main": [
+        [
+          {
+            "node": "Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find unalerted alerts": {
+      "main": [
+        [
+          {
+            "node": "Van értesítési hiba?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Discord": {
+      "main": [
+        [
+          {
+            "node": "Mark alerts sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "tags": []
+}

@@ -1,0 +1,103 @@
+{
+  "name": "Portfolio 01 – Lead Lookup",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "95cf3f21-926a-4f03-9efe-2551bbf0278c",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e51066f0-e9ae-48a8-95b6-cf7ac4fa6574",
+              "name": "status",
+              "value": "new",
+              "type": "string"
+            },
+            {
+              "id": "9eb2b935-6c51-45cc-8532-0bcdb6bc6035",
+              "name": "keyword",
+              "value": "Teszt Biztonság",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "f0d342b6-d987-40be-a2eb-c2914d67ca4c",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  id,\n  customer_name,\n  customer_email,\n  request_details,\n  status,\n  notification_status,\n  created_at\nFROM public.lead_requests\nWHERE\n  (\n    COALESCE($1::text, '') = ''\n    OR status = $1::text\n  )\n  AND\n  (\n    COALESCE($2::text, '') = ''\n    OR customer_name ILIKE '%' || $2::text || '%'\n    OR customer_email ILIKE '%' || $2::text || '%'\n    OR request_details ILIKE '%' || $2::text || '%'\n  )\nORDER BY created_at DESC, id DESC\nLIMIT 20;",
+        "options": {
+          "queryReplacement": "={{ [   String($json.status ?? \"\").trim(),   String($json.keyword ?? \"\").trim() ] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        448,
+        0
+      ],
+      "id": "7f85eb46-1bac-4677-af5c-8b2b97163348",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "REDACTED",
+          "name": "Neon – Secure Lead App"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "tags": []
+}

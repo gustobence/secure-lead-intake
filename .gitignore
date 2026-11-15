@@ -1,0 +1,18 @@
+# Secrets and local config – never commit
+.env
+.env.*
+*.pem
+*.key
+credentials*.json
+
+# Raw, unsanitised exports and backups
+*_raw.json
+*.zip
+*.csv
+*.docx
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
