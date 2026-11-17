@@ -23,14 +23,14 @@ A small business receives quote requests through a web form. The system should:
 
 | # | Component | Stack | What it does |
 |---|---|---|---|
-| 01 | **Secure Lead Intake** | n8n, JavaScript, PostgreSQL, Gmail | Form Trigger → JS validation → `INSERT … ON CONFLICT DO NOTHING` → Gmail notification → status `sent`, or `failed` on the error branch |
+| 01 | **Secure Lead Intake** | n8n, JavaScript, PostgreSQL, Gmail | Form Trigger → JS validation (invalid input → error page for the user) → `INSERT … ON CONFLICT DO NOTHING` → Gmail notification → status `sent`, or `failed` on the error branch |
 | 02 | **Notification Monitor** | n8n, PostgreSQL, Discord | Runs hourly, finds `failed` records and `pending` records older than 15 minutes, sends a Discord alert, then sets `alert_sent_at` |
 | 03 | **Lead Lookup** | n8n, PostgreSQL | Manually triggered, parameterised search by status and keyword (max. 20 rows) |
 | – | **Lead Manager UI** | Appsmith, PostgreSQL | Internal read-only list with search and a detail view, reading PostgreSQL **directly** (not through the Lead Lookup workflow) |
 
 ## Key design decisions
 
-- **Validation in JavaScript:** name 2–100 characters, message 10–2000 characters, basic e-mail regex. Invalid input never reaches the database.
+- **Validation in JavaScript:** name 2–100 characters, message 10–2000 characters, basic e-mail regex. Invalid input never reaches the database, and the user sees a Hungarian error page (n8n Form Ending node) instead of the default "Your response has been recorded" message.
 - **Database-level deduplication:** `dedupe_key` = JSON string of `[lower-cased e-mail, trimmed message]` with a `UNIQUE` constraint. `ON CONFLICT DO NOTHING` + `RETURNING id` tells the workflow whether a new row was inserted. A Gmail is sent only for new rows.
 - **SQL injection protection:** all user input is passed as query parameters (`$1 … $4`), never concatenated into SQL.
 - **Notification status tracking:** `pending` → `sent` / `failed`. Sending the e-mail and updating the status are two separate steps, so a record can stay `pending` even though the e-mail went out. The monitor reports this case. It does **not** resend blindly.
@@ -48,11 +48,14 @@ A small business receives quote requests through a web form. The system should:
 | New request | `was_inserted = true`, new `lead_id` | [02](docs/screenshots/02-new-lead-inserted.png) |
 | Same request again | `was_inserted = false`, no second e-mail | [03](docs/screenshots/03-duplicate-blocked.png) |
 | Too short message (`szia`) | `is_valid = false`, stopped before the database | [04](docs/screenshots/04-validation-error.png) |
+| Error page for the user (added later) | `szia` → Hungarian error page; valid input → default confirmation. Tested on a local n8n (2.47.7) with the database node disabled, so the full path with database and Gmail was not re-tested | – |
 | Gmail error | `notification_status = failed` recorded | [05](docs/screenshots/05-gmail-failure-handling.png) |
 | Monitor structure | Schedule → query → If → Discord → mark | [06](docs/screenshots/06-monitor-workflow.png) |
 | Scheduled monitor runs | Successful hourly runs | [07](docs/screenshots/07-monitor-scheduled-runs.png) |
 | Discord alert | Shows only the problem count, no customer data | [08](docs/screenshots/08-discord-alert.png) |
 | Lead Lookup | `status = new`, `keyword = Teszt Biztonság` → 1 result | [09](docs/screenshots/09-lead-lookup.png) |
+
+Screenshot 01 shows the workflow before the error page was added.
 
 The Appsmith UI was tested manually (9 records listed, search and detail view working, read-only permission check passed), but no screenshot of it is included.
 
@@ -87,6 +90,7 @@ A detailed Hungarian case study (10 pages) is available here: [`docs/case-study-
 ## Known limitations / not production-ready
 
 - No spam protection or rate limiting on the form, and no CAPTCHA.
+- Rejected (invalid) submissions are not logged.
 - No privacy notice, data retention or deletion policy.
 - No automatic retry for failed notifications, and the monitor does not watch its own failures.
 - The Appsmith search only works on the loaded records (max. 100). Server-side search and paging are missing.
@@ -106,7 +110,7 @@ A detailed Hungarian case study (10 pages) is available here: [`docs/case-study-
 
 **Állapot:** tesztelt portfóliódemó, **nem éles üzemi rendszer**. 2026 novemberében készült és lett tesztelve n8n Cloudon. Az előfizetés azóta megszűnt, **a workflow-k már nem futnak**. A tároló a tervezést, a workflow-exportokat és a tesztbizonyítékokat dokumentálja. AI-modellt nem használ, minden adat tesztadat.
 
-**Mit csinál?** Egy kisvállalkozás ajánlatkéréseit fogadja űrlapon. A beküldött adatokat JavaScripttel ellenőrzi, majd PostgreSQL-ben adatbázis-szintű duplikációvédelemmel (`UNIQUE` + `ON CONFLICT DO NOTHING`) menti el. Csak új kérésnél küld Gmail-értesítést, és az értesítés állapotát (`pending` / `sent` / `failed`) eltárolja. Egy óránként futó monitor Discordon jelez, ha egy értesítés hibás lett vagy elakadt. Az ügyintéző egy csak olvasó Appsmith-felületen keresheti a kéréseket.
+**Mit csinál?** Egy kisvállalkozás ajánlatkéréseit fogadja űrlapon. A beküldött adatokat JavaScripttel ellenőrzi (hibás adatnál a vendég magyar hibaüzenetet lát), majd PostgreSQL-ben adatbázis-szintű duplikációvédelemmel (`UNIQUE` + `ON CONFLICT DO NOTHING`) menti el. Csak új kérésnél küld Gmail-értesítést, és az értesítés állapotát (`pending` / `sent` / `failed`) eltárolja. Egy óránként futó monitor Discordon jelez, ha egy értesítés hibás lett vagy elakadt. Az ügyintéző egy csak olvasó Appsmith-felületen keresheti a kéréseket.
 
 **Biztonság:** paraméterezett SQL-lekérdezéseket használ. Az adatbázis-szerepkörök külön vannak választva: az n8n-nek nincs `DELETE` joga, az Appsmith-felhasználó pedig csak olvasni tud, ezt lekérdezéssel ellenőriztem. A tárolóban nincs jelszó, credential-azonosító, webhook-URL vagy valódi személyes adat.
 

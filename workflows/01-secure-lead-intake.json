@@ -204,6 +204,23 @@
           "name": "Neon – Secure Lead App"
         }
       }
+    },
+    {
+      "parameters": {
+        "operation": "completion",
+        "respondWith": "text",
+        "completionTitle": "Az ajánlatkérést nem tudtuk elküldeni",
+        "completionMessage": "Kérjük, ellenőrizd az adatokat: a név 2–100 karakter, az e-mail-cím érvényes, az üzenet legalább 10 karakter legyen. Lépj vissza, és küldd el újra.",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        708,
+        200
+      ],
+      "id": "1b0a3673-22e0-4db9-a4bf-4b5a217511cb",
+      "name": "Invalid input – error page"
     }
   ],
   "pinData": {},
@@ -235,6 +252,13 @@
         [
           {
             "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Invalid input – error page",
             "type": "main",
             "index": 0
           }
